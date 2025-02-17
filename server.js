@@ -10,19 +10,11 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const server = http.createServer(app);
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-const RETRY_COUNT = 3;
-const RETRY_DELAY = 1000; // 1 second
-// Helper function to check if response is HTML
-const isHtmlResponse = (text) => {
-    return text.trim().toLowerCase().startsWith('<!doctype html>') ||
-        text.trim().toLowerCase().startsWith('<html');
-};
 
 // Increase timeouts to prevent connection reset issues
 server.keepAliveTimeout = 120000; // 120 seconds
 server.headersTimeout = 120000; // 120 seconds
+
 
 // Updated CORS configuration to allow all origins during development
 if (process.env.NODE_ENV === 'production') {
@@ -39,6 +31,7 @@ if (process.env.NODE_ENV === 'production') {
     }));
 }
 
+
 const SYNERGY_API_URL = 'https://synergyalphaapi.onrender.com';
 
 // Debug middleware
@@ -46,6 +39,7 @@ app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
     next();
 });
+
 
 // Add error handling middleware
 app.use((err, req, res, next) => {
@@ -56,6 +50,8 @@ app.use((err, req, res, next) => {
         timestamp: new Date().toISOString()
     });
 });
+
+
 
 
 
@@ -100,89 +96,48 @@ app.get('/api/balance-sheet/:symbol', async (req, res) => {
     }
 });
 
-// Helper function to make request with retry logic
-async function fetchWithRetry(url, options = {}, retries = RETRY_COUNT) {
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await fetch(url, options);
-            const responseText = await response.text();
-
-            // Check if response is HTML (indicating an error page)
-            if (isHtmlResponse(responseText)) {
-                throw new Error('Received HTML response instead of JSON');
-            }
-
-            // Try to parse JSON
-            let data;
-            try {
-                data = JSON.parse(responseText);
-            } catch (parseError) {
-                throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}...`);
-            }
-
-            // Check if response was successful
-            if (!response.ok) {
-                throw new Error(`API returned status ${response.status}: ${JSON.stringify(data)}`);
-            }
-
-            return data;
-        } catch (error) {
-            console.error(`Attempt ${i + 1}/${retries} failed:`, error.message);
-
-            // If this was the last attempt, throw the error
-            if (i === retries - 1) {
-                throw error;
-            }
-
-            // Wait before retrying
-            await delay(RETRY_DELAY * (i + 1)); // Exponential backoff
-        }
-    }
-}
-
-// Updated search endpoint
+// Fixed search endpoint
 app.get('/api/search', async (req, res) => {
     try {
         const { query, limit = 20, page = 1 } = req.query;
         console.log('Search requested for:', query);
 
         if (!query) {
-            return res.status(400).json({
-                error: 'Query parameter is required',
-                timestamp: new Date().toISOString()
-            });
+            return res.status(400).json({ error: 'Query parameter is required' });
         }
 
         const searchUrl = `${SYNERGY_API_URL}/search?query=${encodeURIComponent(query)}&limit=${limit}&page=${page}`;
         console.log('Search URL:', searchUrl);
 
-        const responseData = await fetchWithRetry(searchUrl);
+        const searchResponse = await fetch(searchUrl);
+        const responseText = await searchResponse.text(); // First, get the response as text
+
+        let responseData;
+        try {
+            responseData = JSON.parse(responseText); // Then parse it as JSON
+        } catch (error) {
+            console.error('Failed to parse JSON response:', responseText);
+            throw new Error(`Failed to parse JSON: ${error.message}. Raw response: ${responseText.substring(0, 200)}`);
+        }
+
+        if (!searchResponse.ok) {
+            throw new Error(`Synergy API error (${searchResponse.status}): ${JSON.stringify(responseData)}`);
+        }
 
         // Validate response data structure
         if (!responseData.results || !Array.isArray(responseData.results)) {
-            throw new Error('Invalid data structure returned from API');
+            console.error('Invalid search data structure:', responseData);
+            throw new Error('Invalid search data structure returned from API');
         }
 
         console.log(`Found ${responseData.results.length} results for query "${query}"`);
-
-        // Return successful response
-        res.json({
-            status: 'success',
-            data: responseData,
-            timestamp: new Date().toISOString()
-        });
+        res.json(responseData);
 
     } catch (error) {
-        console.error('Search error:', error);
-
-        // Determine appropriate status code
-        const statusCode = error.message.includes('API returned status') ? 502 : 500;
-
-        // Send detailed error response
-        res.status(statusCode).json({
+        console.error('Server error during search:', error);
+        res.status(500).json({
             error: 'Failed to fetch search data',
             details: error.message,
-            retryable: statusCode === 502, // Indicate if the client should retry
             timestamp: new Date().toISOString()
         });
     }
