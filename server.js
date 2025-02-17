@@ -161,6 +161,69 @@ async function handleApiResponse(response, source) {
     }
 }
 
+
+
+app.get('/api/income-statement/:symbol', async (req, res) => {
+    try {
+        const { symbol } = req.params;
+        const { period = 'annual' } = req.query;
+
+        if (!symbol) {
+            return res.status(400).json({ error: 'Symbol parameter is required' });
+        }
+
+        const cleanSymbol = symbol.toUpperCase().trim();
+        console.log(`Fetching income statement data for symbol: ${cleanSymbol}, period: ${period}`);
+
+        const incomeStatementUrl = `${SYNERGY_API_URL}/companies/${cleanSymbol}/income-statement?period=${period}`;
+        console.log('Income Statement URL:', incomeStatementUrl);
+
+        const response = await fetch(incomeStatementUrl);
+        console.log('Response status:', response.status);
+
+        const responseText = await response.text();
+        console.log('Raw response preview:', responseText.substring(0, 200));
+
+        let data;
+        try {
+            data = JSON.parse(responseText);
+        } catch (error) {
+            console.error('Failed to parse income statement JSON:', error);
+            return res.status(500).json({
+                error: 'Failed to parse JSON response',
+                details: error.message,
+                rawResponsePreview: responseText.substring(0, 200),
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        if (!response.ok) {
+            return res.status(response.status).json({
+                error: `API returned status ${response.status}`,
+                details: JSON.stringify(data),
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        console.log(`Successfully fetched income statement data for: ${cleanSymbol}`);
+
+        // Set CORS headers explicitly to ensure they're present
+        res.header('Access-Control-Allow-Origin', req.headers.origin || 'http://localhost:3000');
+        res.header('Access-Control-Allow-Credentials', 'true');
+
+        // Return the data as-is since we'll handle the transformation in the frontend
+        res.json(data);
+
+    } catch (error) {
+        console.error('Detailed error:', error);
+        res.status(500).json({
+            error: 'Failed to fetch income statement data',
+            details: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
 app.get('/api/earnings', async (req, res) => {
     try {
         const { symbol } = req.query;
