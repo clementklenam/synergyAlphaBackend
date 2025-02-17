@@ -19,12 +19,11 @@ server.headersTimeout = 120000; // 120 seconds
 
 // Updated CORS configuration to allow all origins during development
 const corsOptions = {
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000', 'http://127.0.0.1:3001', /\.render\.com$/],
+    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000', 'http://127.0.0.1:3001'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
 };
-
 
 
 // Apply CORS middleware globally
@@ -33,8 +32,12 @@ app.use(cors(corsOptions));
 // Debug middleware
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    console.log(`Origin: ${req.headers.origin}, Referer: ${req.headers.referer || 'N/A'}`);
     next();
 });
+
+app.options('*', cors(corsOptions));
+
 
 // Add error handling middleware
 app.use((err, req, res, next) => {
@@ -46,10 +49,12 @@ app.use((err, req, res, next) => {
     });
 });
 
+
 // added health check endpoint
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
 
 app.get('/api/search', async (req, res) => {
     try {
@@ -99,12 +104,7 @@ app.get('/api/search', async (req, res) => {
 
 
 
-
-
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
+// Enhanced balance sheet endpoint
 app.get('/api/balance-sheet/:symbol', async (req, res) => {
     try {
         const { symbol } = req.params;
@@ -115,7 +115,7 @@ app.get('/api/balance-sheet/:symbol', async (req, res) => {
         }
 
         const cleanSymbol = symbol.toUpperCase().trim();
-        console.log(`Fetching balance sheet data for symbol: ${cleanSymbol}`);
+        console.log(`Fetching balance sheet data for symbol: ${cleanSymbol}, period: ${period}`);
 
         const balanceSheetUrl = `${SYNERGY_API_URL}/companies/${cleanSymbol}/balance-sheet?period=${period}`;
         console.log('Balance Sheet URL:', balanceSheetUrl);
@@ -124,21 +124,35 @@ app.get('/api/balance-sheet/:symbol', async (req, res) => {
         console.log('Response status:', response.status);
 
         const responseText = await response.text();
-        console.log('Raw response:', responseText.substring(0, 200)); // Log first 200 chars for debugging
+        console.log('Raw response preview:', responseText.substring(0, 200));
 
         let data;
         try {
             data = JSON.parse(responseText);
         } catch (error) {
             console.error('Failed to parse balance sheet JSON:', error);
-            throw new Error(`Failed to parse JSON response: ${error.message}`);
+            return res.status(500).json({
+                error: 'Failed to parse JSON response',
+                details: error.message,
+                rawResponsePreview: responseText.substring(0, 200),
+                timestamp: new Date().toISOString()
+            });
         }
 
         if (!response.ok) {
-            throw new Error(`API returned status ${response.status}: ${JSON.stringify(data)}`);
+            return res.status(response.status).json({
+                error: `API returned status ${response.status}`,
+                details: JSON.stringify(data),
+                timestamp: new Date().toISOString()
+            });
         }
 
-        console.log('Successfully fetched balance sheet data for:', cleanSymbol);
+        console.log(`Successfully fetched balance sheet data for: ${cleanSymbol}`);
+
+        // Set CORS headers explicitly to ensure they're present
+        res.header('Access-Control-Allow-Origin', req.headers.origin || 'http://localhost:3000');
+        res.header('Access-Control-Allow-Credentials', 'true');
+
         res.json(data);
 
     } catch (error) {
@@ -150,6 +164,7 @@ app.get('/api/balance-sheet/:symbol', async (req, res) => {
         });
     }
 });
+
 
 // Fixed earnings endpoint with separate response handling
 async function handleApiResponse(response, source) {
