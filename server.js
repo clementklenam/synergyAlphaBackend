@@ -17,7 +17,7 @@ server.headersTimeout = 120000; // 120 seconds
 
 // Updated CORS configuration to allow all origins during development
 const corsOptions = {
-    origin: ['http://localhost:3000', 'http://127.0.0.1:3000', /\.render\.com$/],
+    origin: ['http://localhost:3001', 'http://127.0.0.1:3001', /\.render\.com$/],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
