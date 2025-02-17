@@ -165,6 +165,43 @@ app.get('/api/balance-sheet/:symbol', async (req, res) => {
     }
 });
 
+// Helper function to map API values to our frontend expected format
+function mapBalanceSheetValues(values) {
+    return {
+        // Assets
+        cashAndCashEquivalents: values["Cash And Cash Equivalents"],
+        shortTermInvestments: values["Other Short Term Investments"],
+        netReceivables: values["Accounts Receivable"],
+        inventory: values["Inventory"],
+        otherCurrentAssets: values["Other Current Assets"],
+        totalCurrentAssets: values["Current Assets"],
+        propertyPlantEquipmentNet: values["Net PPE"],
+        goodwill: values["Goodwill"],
+        intangibleAssets: values["Other Intangible Assets"],
+        longTermInvestments: null, // Not directly provided in the API
+        otherNonCurrentAssets: values["Other Non Current Assets"],
+        totalAssets: values["Total Assets"],
+
+        // Liabilities
+        accountPayables: values["Accounts Payable"],
+        shortTermDebt: values["Current Debt"],
+        deferredRevenue: values["Current Deferred Revenue"],
+        otherCurrentLiabilities: values["Other Current Liabilities"],
+        totalCurrentLiabilities: values["Current Liabilities"],
+        longTermDebt: values["Long Term Debt"],
+        deferredTaxLiabilitiesNonCurrent: values["Non Current Deferred Taxes Liabilities"],
+        otherNonCurrentLiabilities: values["Other Non Current Liabilities"],
+        totalLiabilities: values["Total Liabilities Net Minority Interest"],
+
+        // Equity
+        commonStock: values["Common Stock"],
+        retainedEarnings: values["Retained Earnings"],
+        treasuryStock: null, // Could be derived from "Treasury Shares Number" but that's null in your example
+        accumulatedOtherComprehensiveIncomeLoss: values["Gains Losses Not Affecting Retained Earnings"],
+        totalStockholdersEquity: values["Stockholders Equity"]
+    };
+}
+
 
 // Fixed earnings endpoint with separate response handling
 async function handleApiResponse(response, source) {
