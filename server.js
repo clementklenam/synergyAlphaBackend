@@ -42,10 +42,7 @@ app.use((err, req, res, next) => {
     });
 });
 
-<<<<<<< HEAD
-=======
 // added health check endpoint
->>>>>>> 4b18d23 (update to  the health check endpoint and also fix the server side search error)
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
