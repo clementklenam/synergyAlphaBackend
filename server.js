@@ -28,7 +28,7 @@ app.get('/health', (req, res) => {
 app.get('/api/balance-sheet/:symbol', async (req, res) => {
     try {
         const { symbol } = req.params;
-        const { period = 'annual' } = req.query; // Add period parameter with default value
+        const { period = 'annual' } = req.query;
 
         if (!symbol) {
             return res.status(400).json({ error: 'Symbol parameter is required' });
@@ -42,9 +42,6 @@ app.get('/api/balance-sheet/:symbol', async (req, res) => {
 
         const response = await fetch(balanceSheetUrl);
         console.log('Response status:', response.status);
-
-        const contentType = response.headers.get('content-type');
-        console.log('Response content-type:', contentType);
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -65,7 +62,7 @@ app.get('/api/balance-sheet/:symbol', async (req, res) => {
     }
 });
 
-// New endpoint for stock search using Synergy API
+// Fixed search endpoint
 app.get('/api/search', async (req, res) => {
     try {
         const { query, limit = 20, page = 1 } = req.query;
@@ -75,20 +72,18 @@ app.get('/api/search', async (req, res) => {
             return res.status(400).json({ error: 'Query parameter is required' });
         }
 
-        // Call the Synergy API for search results
-        console.log('Fetching search data from Synergy API...');
         const searchUrl = `${SYNERGY_API_URL}/search?query=${encodeURIComponent(query)}&limit=${limit}&page=${page}`;
         console.log('Search URL:', searchUrl);
 
         const searchResponse = await fetch(searchUrl);
-        let responseData;
+        const responseText = await searchResponse.text(); // First, get the response as text
 
+        let responseData;
         try {
-            responseData = await searchResponse.json();
+            responseData = JSON.parse(responseText); // Then parse it as JSON
         } catch (error) {
-            const errorText = await searchResponse.text();
-            console.error('Failed to parse JSON response:', errorText);
-            throw new Error(`Failed to parse JSON: ${error.message}. Raw response: ${errorText.substring(0, 200)}`);
+            console.error('Failed to parse JSON response:', responseText);
+            throw new Error(`Failed to parse JSON: ${error.message}. Raw response: ${responseText.substring(0, 200)}`);
         }
 
         if (!searchResponse.ok) {
@@ -114,6 +109,17 @@ app.get('/api/search', async (req, res) => {
     }
 });
 
+// Fixed earnings endpoint with separate response handling
+async function handleApiResponse(response, source) {
+    const text = await response.text();
+    try {
+        return JSON.parse(text);
+    } catch (error) {
+        console.error(`Failed to parse ${source} JSON:`, text);
+        throw new Error(`Failed to parse ${source} response: ${error.message}`);
+    }
+}
+
 app.get('/api/earnings', async (req, res) => {
     try {
         const { symbol } = req.query;
@@ -137,7 +143,7 @@ app.get('/api/earnings', async (req, res) => {
 
         const calendarResponse = await fetch(calendarUrl, {
             headers: {
-                'X-Finnhub-Token': FINNHUB_API_KEY
+                'X-Finnhub-Token': process.env.FINNHUB_API_KEY
             }
         });
 
@@ -149,7 +155,7 @@ app.get('/api/earnings', async (req, res) => {
 
         const estimatesResponse = await fetch(estimatesUrl, {
             headers: {
-                'X-Finnhub-Token': FINNHUB_API_KEY
+                'X-Finnhub-Token': process.env.FINNHUB_API_KEY
             }
         });
 
