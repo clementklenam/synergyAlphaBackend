@@ -9,9 +9,27 @@ const __dirname = dirname(__filename);
 
 const app = express();
 
-app.use(cors({
-    origin: 'http://localhost:3000'
-}));
+// Updated CORS configuration to allow all origins during development
+if (process.env.NODE_ENV === 'production') {
+    // In production, specify allowed origins
+    app.use(cors({
+        origin: [
+            // Your production frontend URL
+            'https://your-render-frontend-url.com',
+            // Allow relative requests if frontend and backend are deployed together
+            /\.render\.com$/  // Allow all subdomains on render.com
+        ]
+    }));
+} else {
+    // In development, allow requests from the React dev server
+    app.use(cors({
+        origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+        credentials: true
+    }));
+
+    // Log CORS setup
+    console.log('CORS configured for development with origins:', ['http://localhost:3000', 'http://127.0.0.1:3000']);
+}
 
 const SYNERGY_API_URL = 'https://synergyalphaapi.onrender.com';
 
@@ -20,6 +38,9 @@ app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
     next();
 });
+
+
+
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
