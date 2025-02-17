@@ -3,32 +3,31 @@ import cors from 'cors';
 import fetch from 'node-fetch';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import http from 'http';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
+const server = http.createServer(app);
+
+// Increase timeouts to prevent connection reset issues
+server.keepAliveTimeout = 120000; // 120 seconds
+server.headersTimeout = 120000; // 120 seconds
 
 // Updated CORS configuration to allow all origins during development
 if (process.env.NODE_ENV === 'production') {
-    // In production, specify allowed origins
     app.use(cors({
         origin: [
-            // Your production frontend URL
             'https://your-render-frontend-url.com',
-            // Allow relative requests if frontend and backend are deployed together
-            /\.render\.com$/  // Allow all subdomains on render.com
+            /\.render\.com$/
         ]
     }));
 } else {
-    // In development, allow requests from the React dev server
     app.use(cors({
         origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
         credentials: true
     }));
-
-    // Log CORS setup
-    console.log('CORS configured for development with origins:', ['http://localhost:3000', 'http://127.0.0.1:3000']);
 }
 
 const SYNERGY_API_URL = 'https://synergyalphaapi.onrender.com';
@@ -39,6 +38,15 @@ app.use((req, res, next) => {
     next();
 });
 
+// Add error handling middleware
+app.use((err, req, res, next) => {
+    console.error('Global error handler:', err);
+    res.status(500).json({
+        error: 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? err.message : 'An unexpected error occurred',
+        timestamp: new Date().toISOString()
+    });
+});
 
 
 
@@ -206,10 +214,29 @@ app.get('/api/earnings', async (req, res) => {
     }
 });
 
-const PORT = 5001;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Available endpoints:`);
-    console.log(`- GET /api/search - Search for stocks`);
-    console.log(`- GET /api/earnings - Get earnings data for a stock`);
+const PORT = process.env.PORT || 10000; // Use Render's default port if not specified
+const HOST = '0.0.0.0'; // Bind to all network interfaces
+
+server.listen(PORT, HOST, () => {
+    console.log(`Server running on http://${HOST}:${PORT}`);
+    console.log('Available endpoints:');
+    console.log('- GET /api/search - Search for stocks');
+    console.log('- GET /api/earnings - Get earnings data for a stock');
+});
+
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received. Performing graceful shutdown...');
+    server.close(() => {
+        console.log('Server closed. Exiting process.');
+        process.exit(0);
+    });
+});
+
+process.on('SIGINT', () => {
+    console.log('SIGINT received. Performing graceful shutdown...');
+    server.close(() => {
+        console.log('Server closed. Exiting process.');
+        process.exit(0);
+    });
 });
