@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import http from 'http';
 
+
+const SYNERGY_API_URL = process.env.SYNERGY_API_URL || 'https://synergyalphaapi.onrender.com';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -22,6 +24,8 @@ const corsOptions = {
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
 };
+
+
 
 // Apply CORS middleware globally
 app.use(cors(corsOptions));
@@ -110,21 +114,30 @@ app.get('/api/balance-sheet/:symbol', async (req, res) => {
             return res.status(400).json({ error: 'Symbol parameter is required' });
         }
 
-        const cleanSymbol = symbol.toLowerCase().trim();
+        const cleanSymbol = symbol.toUpperCase().trim();
         console.log(`Fetching balance sheet data for symbol: ${cleanSymbol}`);
 
         const balanceSheetUrl = `${SYNERGY_API_URL}/companies/${cleanSymbol}/balance-sheet?period=${period}`;
-        console.log('Request URL:', balanceSheetUrl);
+        console.log('Balance Sheet URL:', balanceSheetUrl);
 
         const response = await fetch(balanceSheetUrl);
         console.log('Response status:', response.status);
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`API returned status ${response.status}: ${errorText}`);
+        const responseText = await response.text();
+        console.log('Raw response:', responseText.substring(0, 200)); // Log first 200 chars for debugging
+
+        let data;
+        try {
+            data = JSON.parse(responseText);
+        } catch (error) {
+            console.error('Failed to parse balance sheet JSON:', error);
+            throw new Error(`Failed to parse JSON response: ${error.message}`);
         }
 
-        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(`API returned status ${response.status}: ${JSON.stringify(data)}`);
+        }
+
         console.log('Successfully fetched balance sheet data for:', cleanSymbol);
         res.json(data);
 
@@ -137,7 +150,6 @@ app.get('/api/balance-sheet/:symbol', async (req, res) => {
         });
     }
 });
-
 
 // Fixed earnings endpoint with separate response handling
 async function handleApiResponse(response, source) {
