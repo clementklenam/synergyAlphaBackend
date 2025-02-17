@@ -149,11 +149,64 @@ app.get('/api/balance-sheet/:symbol', async (req, res) => {
 
         console.log(`Successfully fetched balance sheet data for: ${cleanSymbol}`);
 
+        // Transform the data to match frontend expectations
+        let transformedData = [];
+
+        // Handle data where dates are keys (as shown in your sample)
+        if (data && typeof data === 'object' && !Array.isArray(data)) {
+            transformedData = Object.keys(data).map(dateKey => {
+                // Format the date string (remove time part if present)
+                let formattedDate = dateKey;
+                if (dateKey.includes(' ')) {
+                    formattedDate = dateKey.split(' ')[0];
+                }
+
+                return {
+                    date: formattedDate,
+                    ...mapBalanceSheetValues(data[dateKey])
+                };
+            });
+
+            console.log(`Transformed object-keyed balance sheet data for: ${cleanSymbol}`);
+        }
+        // Handle case where API returns an array
+        else if (Array.isArray(data)) {
+            transformedData = data.map(period => ({
+                date: period.date || period.fillingDate || period.reportDate || new Date().toISOString().split('T')[0],
+                ...mapBalanceSheetValues(period)
+            }));
+            console.log(`Transformed array balance sheet data for: ${cleanSymbol}`);
+        }
+        // Handle case where API returns a single object without date keys
+        else if (data && typeof data === 'object') {
+            transformedData = [{
+                date: data.date || data.fillingDate || data.reportDate || new Date().toISOString().split('T')[0],
+                ...mapBalanceSheetValues(data)
+            }];
+            console.log(`Mapped single balance sheet object for: ${cleanSymbol}`);
+        } else {
+            console.error(`Invalid data structure for: ${cleanSymbol}`, data);
+            return res.status(400).json({
+                error: 'Invalid data structure from API',
+                details: 'Expected an object or array of balance sheet data',
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        // Sort data by date in descending order (newest first)
+        transformedData.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        // Log a sample of the transformed data for debugging
+        if (transformedData.length > 0) {
+            console.log('First transformed balance sheet entry:', JSON.stringify(transformedData[0], null, 2).substring(0, 500) + '...');
+            console.log(`Transformed ${transformedData.length} balance sheet periods`);
+        }
+
         // Set CORS headers explicitly to ensure they're present
         res.header('Access-Control-Allow-Origin', req.headers.origin || 'http://localhost:3000');
         res.header('Access-Control-Allow-Credentials', 'true');
 
-        res.json(data);
+        res.json(transformedData);
 
     } catch (error) {
         console.error('Detailed error:', error);
@@ -164,7 +217,6 @@ app.get('/api/balance-sheet/:symbol', async (req, res) => {
         });
     }
 });
-
 // Helper function to map API values to our frontend expected format
 function mapBalanceSheetValues(values) {
     return {
@@ -273,6 +325,68 @@ app.get('/api/earnings', async (req, res) => {
         console.error('Server error:', error);
         res.status(500).json({
             error: 'Failed to fetch earnings data',
+            details: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+
+app.get('/api/income-statement/:symbol', async (req, res) => {
+    try {
+        const { symbol } = req.params;
+        const { period = 'annual' } = req.query;
+
+        if (!symbol) {
+            return res.status(400).json({ error: 'Symbol parameter is required' });
+        }
+
+        const cleanSymbol = symbol.toUpperCase().trim();
+        console.log(`Fetching income statement data for symbol: ${cleanSymbol}, period: ${period}`);
+
+        const incomeStatementUrl = `${SYNERGY_API_URL}/companies/${cleanSymbol}/income-statement?period=${period}`;
+        console.log('Income Statement URL:', incomeStatementUrl);
+
+        const response = await fetch(incomeStatementUrl);
+        console.log('Response status:', response.status);
+
+        const responseText = await response.text();
+        console.log('Raw response preview:', responseText.substring(0, 200));
+
+        let data;
+        try {
+            data = JSON.parse(responseText);
+        } catch (error) {
+            console.error('Failed to parse income statement JSON:', error);
+            return res.status(500).json({
+                error: 'Failed to parse JSON response',
+                details: error.message,
+                rawResponsePreview: responseText.substring(0, 200),
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        if (!response.ok) {
+            return res.status(response.status).json({
+                error: `API returned status ${response.status}`,
+                details: JSON.stringify(data),
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        console.log(`Successfully fetched income statement data for: ${cleanSymbol}`);
+
+        // Set CORS headers explicitly to ensure they're present
+        res.header('Access-Control-Allow-Origin', req.headers.origin || 'http://localhost:3000');
+        res.header('Access-Control-Allow-Credentials', 'true');
+
+        // Return the data as-is since we'll handle the transformation in the frontend
+        res.json(data);
+
+    } catch (error) {
+        console.error('Detailed error:', error);
+        res.status(500).json({
+            error: 'Failed to fetch income statement data',
             details: error.message,
             timestamp: new Date().toISOString()
         });
