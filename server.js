@@ -15,31 +15,22 @@ const server = http.createServer(app);
 server.keepAliveTimeout = 120000; // 120 seconds
 server.headersTimeout = 120000; // 120 seconds
 
-
 // Updated CORS configuration to allow all origins during development
-if (process.env.NODE_ENV === 'production') {
-    app.use(cors({
-        origin: [
-            'https://your-render-frontend-url.com',
-            /\.render\.com$/
-        ]
-    }));
-} else {
-    app.use(cors({
-        origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
-        credentials: true
-    }));
-}
+const corsOptions = {
+    origin: ['http://localhost:3000', 'http://127.0.0.1:3000', /\.render\.com$/],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+};
 
-
-const SYNERGY_API_URL = 'https://synergyalphaapi.onrender.com';
+// Apply CORS middleware globally
+app.use(cors(corsOptions));
 
 // Debug middleware
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
     next();
 });
-
 
 // Add error handling middleware
 app.use((err, req, res, next) => {
@@ -51,13 +42,55 @@ app.use((err, req, res, next) => {
     });
 });
 
-app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*'); // Or specify the frontend URL
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    next();
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+app.get('/api/search', async (req, res) => {
+    try {
+        const { query, limit = 20, page = 1 } = req.query;
+        console.log('Search requested for:', query);
+
+        if (!query) {
+            return res.status(400).json({ error: 'Query parameter is required' });
+        }
+
+        const searchUrl = `${SYNERGY_API_URL}/search?query=${encodeURIComponent(query)}&limit=${limit}&page=${page}`;
+        console.log('Search URL:', searchUrl);
+
+        const searchResponse = await fetch(searchUrl);
+        const responseText = await searchResponse.text(); // First, get the response as text
+
+        let responseData;
+        try {
+            responseData = JSON.parse(responseText); // Then parse it as JSON
+        } catch (error) {
+            console.error('Failed to parse JSON response:', responseText);
+            throw new Error(`Failed to parse JSON: ${error.message}. Raw response: ${responseText.substring(0, 200)}`);
+        }
+
+        if (!searchResponse.ok) {
+            throw new Error(`Synergy API error (${searchResponse.status}): ${JSON.stringify(responseData)}`);
+        }
+
+        // Validate response data structure
+        if (!responseData.results || !Array.isArray(responseData.results)) {
+            console.error('Invalid search data structure:', responseData);
+            throw new Error('Invalid search data structure returned from API');
+        }
+
+        console.log(`Found ${responseData.results.length} results for query "${query}"`);
+        res.json(responseData);
+
+    } catch (error) {
+        console.error('Server error during search:', error);
+        res.status(500).json({
+            error: 'Failed to fetch search data',
+            details: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
 
 
 
@@ -104,52 +137,6 @@ app.get('/api/balance-sheet/:symbol', async (req, res) => {
     }
 });
 
-// Fixed search endpoint
-app.get('/api/search', async (req, res) => {
-    try {
-        const { query, limit = 20, page = 1 } = req.query;
-        console.log('Search requested for:', query);
-
-        if (!query) {
-            return res.status(400).json({ error: 'Query parameter is required' });
-        }
-
-        const searchUrl = `${SYNERGY_API_URL}/search?query=${encodeURIComponent(query)}&limit=${limit}&page=${page}`;
-        console.log('Search URL:', searchUrl);
-
-        const searchResponse = await fetch(searchUrl);
-        const responseText = await searchResponse.text(); // First, get the response as text
-
-        let responseData;
-        try {
-            responseData = JSON.parse(responseText); // Then parse it as JSON
-        } catch (error) {
-            console.error('Failed to parse JSON response:', responseText);
-            throw new Error(`Failed to parse JSON: ${error.message}. Raw response: ${responseText.substring(0, 200)}`);
-        }
-
-        if (!searchResponse.ok) {
-            throw new Error(`Synergy API error (${searchResponse.status}): ${JSON.stringify(responseData)}`);
-        }
-
-        // Validate response data structure
-        if (!responseData.results || !Array.isArray(responseData.results)) {
-            console.error('Invalid search data structure:', responseData);
-            throw new Error('Invalid search data structure returned from API');
-        }
-
-        console.log(`Found ${responseData.results.length} results for query "${query}"`);
-        res.json(responseData);
-
-    } catch (error) {
-        console.error('Server error during search:', error);
-        res.status(500).json({
-            error: 'Failed to fetch search data',
-            details: error.message,
-            timestamp: new Date().toISOString()
-        });
-    }
-});
 
 // Fixed earnings endpoint with separate response handling
 async function handleApiResponse(response, source) {
