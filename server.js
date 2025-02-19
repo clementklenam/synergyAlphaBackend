@@ -224,6 +224,76 @@ app.get('/api/income-statement/:symbol', async (req, res) => {
     }
 });
 
+
+app.get('/api/cash-flow-statement/:symbol', async (req, res) => {
+    try {
+        const { symbol } = req.params;
+        const { period = 'annual' } = req.query;
+
+        if (!symbol) {
+            return res.status(400).json({ error: 'Symbol parameter is required' });
+        }
+
+        const cleanSymbol = symbol.toUpperCase().trim();
+        console.log(`Fetching cash flow statement data for symbol: ${cleanSymbol}, period: ${period}`);
+
+        // Log the request origin
+        console.log('Request origin:', req.headers.origin);
+        console.log('Request referer:', req.headers.referer);
+
+        const cashFlowUrl = `${SYNERGY_API_URL}/companies/${cleanSymbol}/cash-flow-statement?period=${period}`;
+        console.log('Cash Flow Statement URL:', cashFlowUrl);
+
+        const response = await fetch(cashFlowUrl);
+        console.log('Response status:', response.status);
+
+        const responseText = await response.text();
+        console.log('Raw response preview:', responseText.substring(0, 200));
+
+        let data;
+        try {
+            data = JSON.parse(responseText);
+        } catch (error) {
+            console.error('Failed to parse cash flow statement JSON:', error);
+            return res.status(500).json({
+                error: 'Failed to parse JSON response',
+                details: error.message,
+                rawResponsePreview: responseText.substring(0, 200),
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        if (!response.ok) {
+            return res.status(response.status).json({
+                error: `API returned status ${response.status}`,
+                details: JSON.stringify(data),
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        console.log(`Successfully fetched cash flow statement data for: ${cleanSymbol}`);
+
+        // Set CORS headers for all origins during development/testing
+        const allowedOrigin = req.headers.origin || '*';
+        res.header('Access-Control-Allow-Origin', allowedOrigin);
+        res.header('Access-Control-Allow-Credentials', 'true');
+        res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+        // Return the data
+        res.json(data);
+
+    } catch (error) {
+        console.error('Detailed error:', error);
+        res.status(500).json({
+            error: 'Failed to fetch cash flow statement data',
+            details: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
 app.get('/api/earnings', async (req, res) => {
     try {
         const { symbol } = req.query;
